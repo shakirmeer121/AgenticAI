@@ -70,7 +70,10 @@ logs = generate_bruteforce_logs(attempts=6)
 ## Demo Pipeline Execution
 
 ```bash
+<<<<<<< codex/build-autonomous-cybersecurity-threat-analysis-system-odyc78
 python manage.py migrate
+=======
+>>>>>>> main
 python scripts/demo_pipeline.py
 ```
 
@@ -80,10 +83,13 @@ python scripts/demo_pipeline.py
 python -m unittest tests/test_threat_detection.py
 ```
 
+<<<<<<< codex/build-autonomous-cybersecurity-threat-analysis-system-odyc78
 ## Troubleshooting
 
 - **`no such table: logs_log` or `incidents_incident`** → Run `python manage.py migrate` before executing the demo script or hitting the APIs.
 
+=======
+>>>>>>> main
 ## Agent Workflow
 
 1. **MonitoringAgent** normalizes logs into a consistent schema.
