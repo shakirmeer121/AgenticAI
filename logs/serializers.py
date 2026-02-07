@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 class LogEntrySerializer(serializers.Serializer):
     source = serializers.CharField(required=False, allow_blank=True)
-    timestamp = serializers.DateTimeField()
+    timestamp = serializers.DateTimeField(required=False, allow_null=True)
     message = serializers.CharField()
     metadata = serializers.DictField(required=False)
 

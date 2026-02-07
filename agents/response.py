@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-
 from agents.llm import OpenAICompatibleLLM
 
 
@@ -21,27 +20,39 @@ class ResponseRecommendationAgent:
 
     def recommend(self, investigation: dict) -> ResponseRecommendation:
         severity = investigation.get("severity", "Low")
+
         if severity == "High":
             actions = [
                 "Temporarily lock targeted accounts after repeated failures.",
                 "Enforce multi-factor authentication for privileged users.",
-                "Add the source IPs to a temporary blocklist or rate limiter.",
+                "Block or rate-limit the source IP.",
                 "Notify the security team and document the incident.",
             ]
-            justification = "High-risk authentication abuse detected."
+            justification = "Confirmed brute force behavior detected."
+
+        elif severity == "Medium":
+            actions = [
+                "Monitor the source IP for continued authentication failures.",
+                "Apply temporary rate limiting on login endpoints.",
+                "Escalate if activity continues.",
+            ]
+            justification = "Suspicious authentication behavior detected."
+
         else:
             actions = [
-                "Continue monitoring authentication logs for unusual patterns.",
-                "Educate users on strong password hygiene.",
+                "Continue monitoring authentication logs.",
+                "Educate users on strong password practices.",
             ]
-            justification = "No critical indicators detected."
+            justification = "No immediate threat detected."
 
-        prompt = (
-            "Provide defensive remediation steps in JSON. "
-            f"Investigation: {investigation}"
-        )
-        llm_response = self.llm.generate(prompt)
         if self.llm.is_configured():
-            return ResponseRecommendation(actions=[llm_response.content], justification="LLM response", severity=severity)
+            llm_response = self.llm.generate(
+                f"Provide defensive recommendations for: {investigation}"
+            )
+            return ResponseRecommendation(
+                actions=[llm_response.content],
+                justification="LLM-generated recommendation",
+                severity=severity,
+            )
 
-        return ResponseRecommendation(actions=actions, justification=justification, severity=severity)
+        return ResponseRecommendation(actions, justification, severity)

@@ -1,31 +1,37 @@
-"""Agent orchestrator to run the pipeline."""
-from __future__ import annotations
-
-from dataclasses import asdict
-
-from agents.investigation import InvestigationAgent
 from agents.memory import MemoryAgent
 from agents.monitoring import MonitoringAgent
-from agents.response import ResponseRecommendationAgent
 from agents.threat_detection import ThreatDetectionAgent
+from agents.investigation import InvestigationAgent
 from logs.models import Log
 
 
 class AgentOrchestrator:
-    """Run the SOC pipeline synchronously."""
+    """
+    Orchestrates log ingestion, detection, investigation, and memory storage.
+
+    IMPORTANT:
+    - Each run is scoped ONLY to the logs provided in the request
+    - No cross-request contamination
+    """
 
     def __init__(self) -> None:
         self.monitoring_agent = MonitoringAgent()
         self.detection_agent = ThreatDetectionAgent()
         self.investigation_agent = InvestigationAgent()
-        self.response_agent = ResponseRecommendationAgent()
         self.memory_agent = MemoryAgent()
 
     def run(self, log_entries: list[dict]) -> dict:
-        normalized_logs = []
+        """
+        Run full analysis pipeline for a single ingestion batch.
+        """
+
+        normalized_logs: list[dict] = []
+
+        # --- Normalize and persist logs ---
         for entry in log_entries:
             normalized = self.monitoring_agent.normalize(entry)
-            Log.objects.create(
+
+            log_record = Log.objects.create(
                 source=normalized.source,
                 timestamp=normalized.timestamp,
                 raw_message=normalized.message,
@@ -36,45 +42,42 @@ class AgentOrchestrator:
                     **normalized.metadata,
                 },
             )
-            normalized_logs.append({
-                "source": normalized.source,
-                "timestamp": normalized.timestamp.isoformat(),
-                "message": normalized.message,
-                **normalized.metadata,
-            })
 
-        detection_result = self.detection_agent.detect(normalized_logs)
-        investigation_result = self.investigation_agent.investigate(
-            detection=asdict(detection_result),
+            normalized_logs.append(log_record.normalized)
+
+        # --- Detection (signals only, no verdicts) ---
+        detection = self.detection_agent.detect(normalized_logs)
+
+        # --- Investigation (LLM-driven reasoning) ---
+        investigation = self.investigation_agent.investigate(
+            signals=detection.signals,
             normalized_logs=normalized_logs,
         )
-        response_result = self.response_agent.recommend(asdict(investigation_result))
 
-        memory_result = self.memory_agent.store_incident(
+        is_alert = investigation.attack_type.lower() != "benign"
+
+        # --- Store incident AFTER analysis ---
+        memory = self.memory_agent.store_incident(
             {
-                "alert": detection_result.alert,
-                "confidence": detection_result.confidence,
-                "reason": detection_result.reason,
-                "attack_type": investigation_result.attack_type,
-                "severity": investigation_result.severity,
-                "summary": investigation_result.summary,
-                "recommendations": {
-                    "actions": response_result.actions,
-                    "justification": response_result.justification,
-                    "severity": response_result.severity,
-                },
-                "signals": detection_result.signals,
+                "alert": is_alert,
+                "confidence": investigation.confidence,
+                "attack_type": investigation.attack_type,
+                "severity": investigation.severity,
+                "summary": investigation.summary,
+                "recommendations": investigation.recommendations,
+                "signals": detection.signals,
             }
         )
 
+        # --- Final API response ---
         return {
-            "incident_id": memory_result.incident.id,
-            "alert": detection_result.alert,
-            "confidence": detection_result.confidence,
-            "reason": detection_result.reason,
-            "attack_type": investigation_result.attack_type,
-            "severity": investigation_result.severity,
-            "summary": investigation_result.summary,
-            "recommendations": response_result.actions,
-            "similar_incidents": memory_result.similar_incidents,
+            "incident_id": memory.incident.id,
+            "alert": is_alert,
+            "confidence": investigation.confidence,
+            "attack_type": investigation.attack_type,
+            "severity": investigation.severity,
+            "summary": investigation.summary,
+            "recommendations": investigation.recommendations,
+            "signals": detection.signals,
+            "similar_incidents": memory.similar_incidents,
         }

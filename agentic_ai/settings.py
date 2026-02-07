@@ -1,4 +1,8 @@
 """Django settings for AgenticAI project."""
+import os
+
+os.environ["OPENROUTER_API_KEY"] = "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"
+
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
